@@ -1,5 +1,5 @@
 provider "aws" {
-    region = "us-east-2"
+    region = module.variables.aws_reg
 }
 
 resource "aws_key_pair" "keypair1" {
