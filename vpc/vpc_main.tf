@@ -2,58 +2,49 @@ module "variables" {
   source = "../var"
 }
 
-data "aws_availability_zones" "azs" {
-
-}
-
 resource "aws_vpc" "vpc" {
-  cidr_block = "10.0.0.0/16"
+  cidr_block = module.variables.vpc_cidr
 
   tags = {
-    Name = "${module.variables.stack}-vpc"
+    Name = "${module.variables.name}-vpc"
+    Environment = module.variables.environment
+    Project = module.variables.project
   }
 }
 
-resource "aws_internet_gateway" "igw" {
+resource "aws_internet_gateway" "igw" {  
   vpc_id = aws_vpc.vpc.id
-
+  
   tags = {
-    Name = "${module.variables.stack}-igw"
+    Name = "${module.variables.name}-igw"
+    Environment = module.variables.environment
+    Project = module.variables.project
   }
 }
 
 resource "aws_eip" "eip" {
-
+  
+  count  = length(module.variables.availability_zones)
   vpc = true
-
+  
   tags = {
-    Name = "${module.variables.stack}-nat-ip"
+    Name = "${element(module.variables.availability_zones, count.index)}-nat-ip"
+    Environment = module.variables.environment
+    Project = module.variables.project
   }
 }
-
 
 resource "aws_nat_gateway" "nat" {
-
-  subnet_id     = aws_subnet.public1.id
-
-  allocation_id = aws_eip.eip.id
-
-  tags = {
-    Name = "${module.variables.stack}-nat"
-  }
-}
+  count         = length(module.variables.availability_zones)
+  subnet_id     = element(aws_subnet.public.*.id, count.index)
 
 
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.vpc.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_nat_gateway.nat.id
-  }
+  allocation_id = element(aws_eip.eip.*.id, count.index)
 
   tags = {
-    Name = "${module.variables.stack}-private"
+    Name = "${element(module.variables.availability_zones, count.index)}-nat"
+    Environment = module.variables.environment
+    Project = module.variables.project
   }
 }
 
@@ -66,88 +57,69 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "${module.variables.stack}-public"
+    Name = "${module.variables.name}-public-route table"
+    Environment = module.variables.environment
+    Project = module.variables.project
   }
 }
 
-
-
-resource "aws_route_table_association" "private1" {
-  route_table_id = aws_route_table.private.id
-  subnet_id      = aws_subnet.private1.id
-}
-
-resource "aws_route_table_association" "private2" {
-  route_table_id = aws_route_table.private.id
-  subnet_id      = aws_subnet.private2.id
-}
-
-resource "aws_route_table_association" "private3" {
-  route_table_id = aws_route_table.private.id
-  subnet_id      = aws_subnet.private3.id
-}
-
-resource "aws_route_table_association" "public1" {
+resource "aws_route_table_association" "public" {
+  count         = length(module.variables.availability_zones)
   route_table_id = aws_route_table.public.id
-  subnet_id      = aws_subnet.public1.id
+  subnet_id      = element(aws_subnet.public.*.id, count.index)
 }
 
-resource "aws_route_table_association" "public2" {
-  route_table_id = aws_route_table.public.id
-  subnet_id      = aws_subnet.public2.id
-}
+resource "aws_route_table" "private" {
+  count      = length(module.variables.availability_zones)
+  vpc_id = aws_vpc.vpc.id
 
-resource "aws_subnet" "public1" {
-  vpc_id            = aws_vpc.vpc.id
-  cidr_block        = "10.0.1.0/24"
-  availability_zone = data.aws_availability_zones.azs.names[0]
+  route {
+    
+    cidr_block = "0.0.0.0/0"
+    gateway_id = element(aws_nat_gateway.nat.*.id, count.index)
+  }
 
   tags = {
-    Name = "${module.variables.stack}-public-1"
+    Name = "${element(module.variables.availability_zones, count.index)}-private-route table"
+    Environment = module.variables.environment
+    Project = module.variables.project
   }
 }
 
-resource "aws_subnet" "public2" {
+resource "aws_route_table_association" "private" {
+  count         = length(module.variables.availability_zones)
+  
+  subnet_id      = element(aws_subnet.private.*.id, count.index)
+  route_table_id = element(aws_route_table.private.*.id, count.index)
+}
+
+resource "aws_subnet" "private" {
+  count      = length(module.variables.availability_zones)
   vpc_id     = aws_vpc.vpc.id
-  cidr_block = "10.0.2.0/24"
-
-  availability_zone = data.aws_availability_zones.azs.names[1]
+  cidr_block = cidrsubnet(module.variables.vpc_cidr, 8, count.index)
+  availability_zone = element(module.variables.availability_zones, count.index)
+  
 
   tags = {
-    Name = "${module.variables.stack}-public-2"
+    Name = "${element(module.variables.availability_zones, count.index)}-private subnet"
+    Environment = module.variables.environment
+    Project = module.variables.project
   }
 }
 
-resource "aws_subnet" "private1" {
+resource "aws_subnet" "public" {
+  count      = length(module.variables.availability_zones)
   vpc_id     = aws_vpc.vpc.id
-  cidr_block = "10.0.3.0/24"
-
-  availability_zone = data.aws_availability_zones.azs.names[0]
+  cidr_block = cidrsubnet(module.variables.vpc_cidr, 8, count.index + length(module.variables.availability_zones))
+  availability_zone = element(module.variables.availability_zones, count.index)
 
   tags = {
-    Name = "${module.variables.stack}-private-1"
+    Name = "${element(module.variables.availability_zones, count.index)}-public subnet"
+    Environment = module.variables.environment
+    Project = module.variables.project
   }
 }
 
-resource "aws_subnet" "private2" {
-  vpc_id     = aws_vpc.vpc.id
-  cidr_block = "10.0.4.0/24"
 
-  availability_zone = data.aws_availability_zones.azs.names[1]
-
-  tags = {
-    Name = "${module.variables.stack}-private-2"
-  }
-}
-
-resource "aws_subnet" "private3" {
-  vpc_id            = aws_vpc.vpc.id
-  cidr_block        = "10.0.5.0/24"
-  availability_zone = data.aws_availability_zones.azs.names[2]
-
-  tags = {
-    Name = "${module.variables.stack}-private-3"
-  }
-}
 
 

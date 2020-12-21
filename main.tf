@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 resource "aws_key_pair" "keypair1" {
-  key_name   = "${module.variables.stack}-keypairs"
+  key_name   = "${module.variables.name}-keypairs"
   public_key = file(module.variables.ssh_key)
 }
 
